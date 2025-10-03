@@ -11,8 +11,9 @@ import os
 from pathlib import Path
 
 from .config import (
-    DEFAULT_MODEL_NAME,
-    OLLAMA_MODEL_ID, 
+    OLLAMA_MODEL_ID,
+    OLLAMA_FALLBACK_MODEL,
+    OLLAMA_SERVER_URL,
     DEFAULT_CONTENT_ROOT,
     SYSTEM_PROMPT,
     PAGE_GENERATION_PROMPT_TEMPLATE,
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 class LLMSiteGenerator:
     """Fully LLM-driven website generator that handles content discovery and HTML generation."""
     
-    def __init__(self, model_name: str = DEFAULT_MODEL_NAME, content_root: str = DEFAULT_CONTENT_ROOT):
+    def __init__(self, model_name: str = OLLAMA_MODEL_ID, content_root: str = DEFAULT_CONTENT_ROOT):
         """
         Initialize the LLM site generator.
         

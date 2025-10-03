@@ -5,9 +5,10 @@ This module contains all prompts, model settings, and other configuration
 that can be easily modified to tune the LLM behavior.
 """
 
-# LLM Model Configuration  
-DEFAULT_MODEL_NAME = "meta-llama/Llama-3.2-8B-Instruct"
-OLLAMA_MODEL_ID = "ollama/llama3.2"
+# LLM Model Configuration - Ollama Server
+OLLAMA_MODEL_ID = "ollama/gemma3:27b"  # Primary model (requires Ollama)
+OLLAMA_FALLBACK_MODEL = "ollama/gemma3:9b"  # Smaller fallback if 27b fails
+OLLAMA_SERVER_URL = "http://localhost:11434"  # Default Ollama server
 
 # Cache Configuration - Redis with in-memory fallback
 DEFAULT_CACHE_TTL = 3600  # 1 hour in seconds

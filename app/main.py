@@ -48,6 +48,18 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Cache initialization issue: {e}")
     
+    # Test Ollama connection
+    try:
+        import requests
+        response = requests.get("http://localhost:11434/api/version", timeout=5)
+        if response.status_code == 200:
+            logger.info("Ollama server connection successful")
+        else:
+            logger.warning("Ollama server responded but with error status")
+    except Exception as e:
+        logger.warning(f"Ollama server not accessible: {e}")
+        logger.warning("Please install Ollama and run: ollama pull gemma2:27b")
+    
     logger.info("LLM Dynamic Site startup complete")
 
 

@@ -70,7 +70,7 @@ function Install-Dependencies {
     
     # Install project dependencies
     Write-Host "Installing core dependencies..." -ForegroundColor Blue
-    python -m pip install "fastapi[standard]>=0.118.0" "smolagents>=1.22.0" "redis>=5.0.0" "transformers>=4.40.0" "torch>=2.0.0"
+    python -m pip install "fastapi[standard]>=0.118.0" "smolagents[litellm]>=1.22.0" "redis>=5.0.0" "litellm>=1.50.0"
     
     if ($DevDependencies) {
         Write-Host "Installing development dependencies..." -ForegroundColor Blue
@@ -106,9 +106,12 @@ function Start-Application {
     # Activate virtual environment
     & $ActivateScript
     
-    # Check if Redis is running (optional check)
+    # Check prerequisites
     Write-Host "Checking prerequisites..." -ForegroundColor Blue
     Write-Host "Note: Redis is optional - will use in-memory cache if Redis unavailable" -ForegroundColor Yellow
+    Write-Host "Required: Ollama must be installed and running with gemma2 model" -ForegroundColor Cyan
+    Write-Host "Install: https://ollama.ai or 'winget install Ollama.Ollama'" -ForegroundColor Gray
+    Write-Host "Setup: 'ollama pull gemma2:27b' (or gemma2:9b for smaller/faster)" -ForegroundColor Gray
     
     # Start the application
     Write-Host "Launching application at http://localhost:8000" -ForegroundColor Cyan

@@ -13,10 +13,9 @@ authors = [
 ]
 dependencies = [
     "fastapi[standard]>=0.118.0",
-    "smolagents>=1.22.0",
+    "smolagents[litellm]>=1.22.0",
     "redis>=5.0.0",
-    "transformers>=4.40.0",
-    "torch>=2.0.0"
+    "litellm>=1.50.0"
 ]
 
 [project.optional-dependencies]

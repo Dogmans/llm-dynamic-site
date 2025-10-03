@@ -35,7 +35,18 @@ source .venv/bin/activate  # Linux/Mac
 pip install -e .
 ```
 
-3. (Optional) Start Redis for caching:
+3. Install and setup Ollama (Required for LLM):
+```bash
+# Install Ollama
+# Windows: Download from https://ollama.ai or use winget install Ollama.Ollama
+# Linux/Mac: curl -fsSL https://ollama.ai/install.sh | sh
+
+# Pull the Gemma 2 model (choose one):
+ollama pull gemma2:27b     # 27B model (~16GB) - excellent quality, needs 32GB+ RAM
+ollama pull gemma2:9b      # 9B model (~5GB) - good quality, faster
+```
+
+4. (Optional) Start Redis for caching:
 ```bash
 # Redis is optional - app uses in-memory cache if Redis unavailable
 # Windows: Download from https://redis.io/download
