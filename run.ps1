@@ -70,7 +70,7 @@ function Install-Dependencies {
     
     # Install project dependencies
     Write-Host "Installing core dependencies..." -ForegroundColor Blue
-    python -m pip install "fastapi[standard]>=0.118.0" "smolagents>=1.22.0" "pymemcache>=4.0.0" "transformers>=4.40.0" "torch>=2.0.0"
+    python -m pip install "fastapi[standard]>=0.118.0" "smolagents>=1.22.0" "redis>=5.0.0" "transformers>=4.40.0" "torch>=2.0.0"
     
     if ($DevDependencies) {
         Write-Host "Installing development dependencies..." -ForegroundColor Blue
