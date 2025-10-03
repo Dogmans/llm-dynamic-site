@@ -9,10 +9,12 @@ that can be easily modified to tune the LLM behavior.
 DEFAULT_MODEL_NAME = "microsoft/DialoGPT-medium"
 OLLAMA_MODEL_ID = "ollama/llama3.2"
 
-# Cache Configuration
+# Cache Configuration - Redis with in-memory fallback
 DEFAULT_CACHE_TTL = 3600  # 1 hour in seconds
-MEMCACHED_HOST = "localhost"
-MEMCACHED_PORT = 11211
+REDIS_HOST = "localhost"
+REDIS_PORT = 6379
+REDIS_DB = 0
+REDIS_PASSWORD = None  # Set if Redis requires auth
 
 # Content Configuration
 DEFAULT_CONTENT_ROOT = "site-content"

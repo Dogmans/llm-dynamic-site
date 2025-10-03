@@ -40,15 +40,13 @@ async def startup_event():
     """Initialize services on startup."""
     logger.info("Starting LLM Dynamic Site...")
     
-    # Test cache connection
+    # Test cache connection and log backend being used
     try:
         stats = cache_manager.get_stats()
-        if stats:
-            logger.info("Memcached connection successful")
-        else:
-            logger.warning("Memcached connection failed - using fallback mode")
+        backend = stats.get('backend', 'unknown')
+        logger.info(f"Cache initialized using {backend} backend")
     except Exception as e:
-        logger.warning(f"Memcached unavailable: {e}")
+        logger.warning(f"Cache initialization issue: {e}")
     
     logger.info("LLM Dynamic Site startup complete")
 
@@ -57,7 +55,7 @@ async def startup_event():
 async def shutdown_event():
     """Clean up resources on shutdown."""
     logger.info("Shutting down LLM Dynamic Site...")
-    cache_manager.close()
+    # No explicit cleanup needed for Redis/memory cache
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -240,6 +238,23 @@ async def health_check():
         logger.error(f"Health check error: {e}")
         return {
             "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+
+@app.get("/api/cache/stats")
+async def cache_stats():
+    """Get cache statistics and backend information."""
+    try:
+        stats = cache_manager.get_stats()
+        return {
+            "cache_stats": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Cache stats error: {e}")
+        return {
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }

@@ -106,9 +106,9 @@ function Start-Application {
     # Activate virtual environment
     & $ActivateScript
     
-    # Check if memcached is running (optional check)
+    # Check if Redis is running (optional check)
     Write-Host "Checking prerequisites..." -ForegroundColor Blue
-    Write-Host "Note: Make sure Memcached is running on localhost:11211" -ForegroundColor Yellow
+    Write-Host "Note: Redis is optional - will use in-memory cache if Redis unavailable" -ForegroundColor Yellow
     
     # Start the application
     Write-Host "Launching application at http://localhost:8000" -ForegroundColor Cyan

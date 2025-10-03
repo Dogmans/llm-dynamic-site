@@ -1,224 +1,258 @@
 """
-Memcached integration for HTML page caching.
+Redis integration for HTML page caching with in-memory fallback.
 
 This module provides a simple interface for caching generated HTML pages
-using Memcached with a default TTL of 1 hour.
+using Redis with a default TTL of 1 hour. Falls back to in-memory cache
+if Redis is unavailable.
 """
 
 import logging
+import time
+import json
 from typing import Optional
 
-from pymemcache.client.base import Client
-from pymemcache.exceptions import MemcacheError
-
-from .config import DEFAULT_CACHE_TTL
+from .config import DEFAULT_CACHE_TTL, REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD
 
 logger = logging.getLogger(__name__)
 
 
 class CacheManager:
-    """Manages HTML caching using Memcached."""
+    """Manages HTML caching using Redis with in-memory fallback."""
     
-    def __init__(self, host: str = "localhost", port: int = 11211, default_ttl: int = DEFAULT_CACHE_TTL):
+    def __init__(self, host: str = REDIS_HOST, port: int = REDIS_PORT, db: int = REDIS_DB, 
+                 password: Optional[str] = REDIS_PASSWORD, default_ttl: int = DEFAULT_CACHE_TTL):
         """
         Initialize the cache manager.
         
         Args:
-            host: Memcached server host
-            port: Memcached server port  
+            host: Redis server host
+            port: Redis server port
+            db: Redis database number
+            password: Redis password (if required)
             default_ttl: Default time-to-live for cached items in seconds (default: 1 hour)
         """
         self.host = host
         self.port = port
+        self.db = db
+        self.password = password
         self.default_ttl = default_ttl
-        self._client: Optional[Client] = None
+        self._redis_client = None
+        self._use_redis = False
+        self._memory_cache = {}  # Fallback in-memory cache: {key: (value, expiry_time)}
         
-    def _get_client(self) -> Client:
-        """Get or create Memcached client connection."""
-        if self._client is None:
-            try:
-                self._client = Client((self.host, self.port))
-                # Test connection
-                self._client.version()
-                logger.info(f"Connected to Memcached at {self.host}:{self.port}")
-            except Exception as e:
-                logger.error(f"Failed to connect to Memcached: {e}")
-                raise
-        return self._client
+        # Try to initialize Redis connection
+        self._initialize_redis()
+        
+    def _initialize_redis(self):
+        """Initialize Redis connection, fallback to in-memory if Redis unavailable."""
+        try:
+            import redis
+            self._redis_client = redis.Redis(
+                host=self.host, 
+                port=self.port, 
+                db=self.db, 
+                password=self.password,
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5
+            )
+            # Test connection
+            self._redis_client.ping()
+            self._use_redis = True
+            logger.info(f"Connected to Redis at {self.host}:{self.port}")
+        except Exception as e:
+            logger.warning(f"Redis unavailable ({e}), using in-memory cache fallback")
+            self._use_redis = False
+    
+    def _normalize_key(self, key: str) -> str:
+        """
+        Normalize cache key to ensure consistency.
+        
+        Args:
+            key: Raw key (usually URL path)
+            
+        Returns:
+            Normalized cache key
+        """
+        # Remove leading/trailing slashes and replace remaining slashes with underscores
+        normalized = key.strip('/').replace('/', '_')
+        return f"llm_site:{normalized}" if normalized else "llm_site:home"
+    
+    def _cleanup_memory_cache(self):
+        """Remove expired entries from in-memory cache."""
+        current_time = time.time()
+        expired_keys = [
+            key for key, (value, expiry) in self._memory_cache.items()
+            if current_time >= expiry
+        ]
+        for key in expired_keys:
+            del self._memory_cache[key]
     
     def get(self, key: str) -> Optional[str]:
         """
         Retrieve cached HTML content by URL path.
         
         Args:
-            key: URL path (e.g., "/about/", "/products/index/")
+            key: URL path to retrieve cached content for
             
         Returns:
-            Cached HTML content if found, None otherwise
+            Cached HTML content or None if not found/expired
         """
-        try:
-            client = self._get_client()
-            cached_content = client.get(self._normalize_key(key))
-            
-            if cached_content:
-                logger.info(f"Cache hit for key: {key}")
-                return cached_content.decode('utf-8')
+        normalized_key = self._normalize_key(key)
+        
+        if self._use_redis:
+            try:
+                content = self._redis_client.get(normalized_key)
+                if content:
+                    logger.debug(f"Redis cache hit for key: {normalized_key}")
+                    return content
+                else:
+                    logger.debug(f"Redis cache miss for key: {normalized_key}")
+                    return None
+            except Exception as e:
+                logger.error(f"Redis get error for key {normalized_key}: {e}")
+                # Fall back to memory cache on Redis error
+                self._use_redis = False
+        
+        # Use in-memory cache (fallback or primary if Redis unavailable)
+        self._cleanup_memory_cache()
+        if normalized_key in self._memory_cache:
+            content, expiry = self._memory_cache[normalized_key]
+            if time.time() < expiry:
+                logger.debug(f"Memory cache hit for key: {normalized_key}")
+                return content
             else:
-                logger.info(f"Cache miss for key: {key}")
-                return None
-                
-        except MemcacheError as e:
-            logger.error(f"Memcache error getting key {key}: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Unexpected error getting key {key}: {e}")
-            return None
+                # Expired
+                del self._memory_cache[normalized_key]
+        
+        logger.debug(f"Memory cache miss for key: {normalized_key}")
+        return None
     
-    def set(self, key: str, content: str, ttl: Optional[int] = None) -> bool:
+    def set(self, key: str, value: str, ttl: Optional[int] = None) -> bool:
         """
-        Store HTML content in cache.
+        Store HTML content in cache with TTL.
         
         Args:
-            key: URL path (e.g., "/about/", "/products/index/")
-            content: HTML content to cache
-            ttl: Time-to-live in seconds (uses default_ttl if None)
+            key: URL path to cache content for
+            value: HTML content to cache
+            ttl: Time-to-live in seconds (defaults to default_ttl)
             
         Returns:
-            True if successful, False otherwise
+            True if successfully cached, False otherwise
         """
-        try:
-            client = self._get_client()
-            cache_ttl = ttl or self.default_ttl
-            
-            success = client.set(
-                self._normalize_key(key),
-                content.encode('utf-8'),
-                expire=cache_ttl
-            )
-            
-            if success:
-                logger.info(f"Cached content for key: {key} (TTL: {cache_ttl}s)")
-            else:
-                logger.warning(f"Failed to cache content for key: {key}")
-                
-            return success
-            
-        except MemcacheError as e:
-            logger.error(f"Memcache error setting key {key}: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Unexpected error setting key {key}: {e}")
-            return False
+        normalized_key = self._normalize_key(key)
+        cache_ttl = ttl if ttl is not None else self.default_ttl
+        
+        if self._use_redis:
+            try:
+                result = self._redis_client.setex(normalized_key, cache_ttl, value)
+                if result:
+                    logger.debug(f"Redis cache set for key: {normalized_key} (TTL: {cache_ttl}s)")
+                    return True
+            except Exception as e:
+                logger.error(f"Redis set error for key {normalized_key}: {e}")
+                # Fall back to memory cache on Redis error
+                self._use_redis = False
+        
+        # Use in-memory cache (fallback or primary if Redis unavailable)
+        expiry_time = time.time() + cache_ttl
+        self._memory_cache[normalized_key] = (value, expiry_time)
+        logger.debug(f"Memory cache set for key: {normalized_key} (TTL: {cache_ttl}s)")
+        
+        # Periodic cleanup of memory cache
+        if len(self._memory_cache) % 10 == 0:  # Cleanup every 10 insertions
+            self._cleanup_memory_cache()
+        
+        return True
     
     def delete(self, key: str) -> bool:
         """
-        Remove item from cache.
+        Remove cached content for a specific URL path.
         
         Args:
             key: URL path to remove from cache
             
         Returns:
-            True if item was deleted, False otherwise
+            True if successfully deleted, False otherwise
         """
-        try:
-            client = self._get_client()
-            success = client.delete(self._normalize_key(key))
-            
-            if success:
-                logger.info(f"Deleted cache entry for key: {key}")
-            else:
-                logger.info(f"No cache entry found for key: {key}")
-                
-            return success
-            
-        except MemcacheError as e:
-            logger.error(f"Memcache error deleting key {key}: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Unexpected error deleting key {key}: {e}")
-            return False
+        normalized_key = self._normalize_key(key)
+        success = False
+        
+        if self._use_redis:
+            try:
+                deleted = self._redis_client.delete(normalized_key)
+                if deleted:
+                    logger.debug(f"Redis cache deleted for key: {normalized_key}")
+                success = True
+            except Exception as e:
+                logger.error(f"Redis delete error for key {normalized_key}: {e}")
+                # Fall back to memory cache on Redis error
+                self._use_redis = False
+        
+        # Also remove from memory cache
+        if normalized_key in self._memory_cache:
+            del self._memory_cache[normalized_key]
+            logger.debug(f"Memory cache deleted for key: {normalized_key}")
+            success = True
+        
+        return success
     
-    def flush_all(self) -> bool:
+    def clear(self) -> bool:
         """
         Clear all cached content.
         
         Returns:
-            True if successful, False otherwise
+            True if successfully cleared, False otherwise
         """
-        try:
-            client = self._get_client()
-            success = client.flush_all()
-            
-            if success:
-                logger.info("Flushed all cache entries")
-            else:
-                logger.warning("Failed to flush cache")
-                
-            return success
-            
-        except MemcacheError as e:
-            logger.error(f"Memcache error flushing cache: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Unexpected error flushing cache: {e}")
-            return False
-    
-    def _normalize_key(self, key: str) -> str:
-        """
-        Normalize cache key to ensure compatibility with Memcached.
+        success = False
         
-        Args:
-            key: Original key
-            
-        Returns:
-            Normalized key safe for Memcached
-        """
-        # Ensure key starts and ends with appropriate characters
-        normalized = key.strip()
-        
-        # Replace any problematic characters for Memcached keys
-        normalized = normalized.replace(' ', '_')
-        normalized = normalized.replace('\n', '_')
-        normalized = normalized.replace('\r', '_')
-        normalized = normalized.replace('\t', '_')
-        
-        # Prefix to avoid conflicts with other applications
-        normalized = f"llm_site:{normalized}"
-        
-        # Memcached keys must be <= 250 characters
-        if len(normalized) > 250:
-            # Use a hash for very long keys
-            import hashlib
-            hash_suffix = hashlib.md5(normalized.encode()).hexdigest()[:16]
-            normalized = f"llm_site:long_key_{hash_suffix}"
-        
-        return normalized
-    
-    def get_stats(self) -> Optional[dict]:
-        """
-        Get Memcached server statistics.
-        
-        Returns:
-            Dictionary of server stats if successful, None otherwise
-        """
-        try:
-            client = self._get_client()
-            stats = client.stats()
-            return stats
-        except Exception as e:
-            logger.error(f"Error getting cache stats: {e}")
-            return None
-    
-    def close(self):
-        """Close the Memcached connection."""
-        if self._client:
+        if self._use_redis:
             try:
-                self._client.close()
-                logger.info("Closed Memcached connection")
+                # Delete all keys with our prefix
+                keys = self._redis_client.keys("llm_site:*")
+                if keys:
+                    deleted = self._redis_client.delete(*keys)
+                    logger.info(f"Redis cache cleared: {deleted} keys deleted")
+                success = True
             except Exception as e:
-                logger.error(f"Error closing Memcached connection: {e}")
-            finally:
-                self._client = None
+                logger.error(f"Redis clear error: {e}")
+                # Fall back to memory cache on Redis error
+                self._use_redis = False
+        
+        # Also clear memory cache
+        cleared_count = len(self._memory_cache)
+        self._memory_cache.clear()
+        logger.info(f"Memory cache cleared: {cleared_count} keys deleted")
+        success = True
+        
+        return success
+    
+    def get_stats(self) -> dict:
+        """
+        Get cache statistics.
+        
+        Returns:
+            Dictionary with cache statistics
+        """
+        stats = {
+            "backend": "redis" if self._use_redis else "memory",
+            "redis_connected": self._use_redis,
+            "memory_cache_size": len(self._memory_cache),
+        }
+        
+        if self._use_redis:
+            try:
+                info = self._redis_client.info()
+                stats.update({
+                    "redis_memory_used": info.get("used_memory_human", "unknown"),
+                    "redis_connected_clients": info.get("connected_clients", 0),
+                    "redis_total_commands": info.get("total_commands_processed", 0)
+                })
+            except Exception as e:
+                logger.error(f"Redis stats error: {e}")
+                stats["redis_stats_error"] = str(e)
+        
+        return stats
 
 
 # Global cache manager instance

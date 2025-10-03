@@ -40,8 +40,10 @@ PAGE_GENERATION_PROMPT_TEMPLATE = """Generate a complete HTML page for..."""
 ### 4. Cache Configuration
 ```python
 DEFAULT_CACHE_TTL = 3600  # 1 hour
-MEMCACHED_HOST = "localhost"
-MEMCACHED_PORT = 11211
+REDIS_HOST = "localhost"
+REDIS_PORT = 6379
+REDIS_DB = 0
+REDIS_PASSWORD = None  # Set if Redis requires auth
 ```
 
 ### 5. HTML Processing Configuration
