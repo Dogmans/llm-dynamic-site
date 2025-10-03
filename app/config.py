@@ -5,8 +5,8 @@ This module contains all prompts, model settings, and other configuration
 that can be easily modified to tune the LLM behavior.
 """
 
-# LLM Model Configuration
-DEFAULT_MODEL_NAME = "microsoft/DialoGPT-medium"
+# LLM Model Configuration  
+DEFAULT_MODEL_NAME = "meta-llama/Llama-3.2-8B-Instruct"
 OLLAMA_MODEL_ID = "ollama/llama3.2"
 
 # Cache Configuration - Redis with in-memory fallback
