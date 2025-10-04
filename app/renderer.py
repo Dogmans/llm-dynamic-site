@@ -49,12 +49,13 @@ class LLMSiteGenerator:
                 # Import here to avoid errors if smolagents not installed
                 from smolagents import CodeAgent, LiteLLMModel
                 
-                model = LiteLLMModel(model_id=OLLAMA_MODEL_ID)  # Using Ollama as fallback
+                model = LiteLLMModel(model_id=OLLAMA_MODEL_ID)
                 
+                # CodeAgent doesn't take system_prompt in constructor
+                # We'll include it in the prompt when we call agent.run()
                 self._agent = CodeAgent(
                     model=model,
-                    tools=[],
-                    system_prompt=SYSTEM_PROMPT
+                    tools=[]
                 )
                 
                 logger.info(f"Initialized LLM site generator with model: {self.model_name}")
@@ -107,12 +108,14 @@ class LLMSiteGenerator:
             # Get file structure for the LLM to work with
             file_structure = self._get_file_structure()
             
-            # Create comprehensive prompt for autonomous generation using template
-            prompt = PAGE_GENERATION_PROMPT_TEMPLATE.format(
+            # Create comprehensive prompt with system instructions
+            prompt = f"""{SYSTEM_PROMPT}
+
+{PAGE_GENERATION_PROMPT_TEMPLATE.format(
                 url_path=url_path,
                 file_structure=file_structure,
                 content_root=self.content_root
-            )
+            )}"""
             
             # Get HTML from the agent
             result = agent.run(prompt)
