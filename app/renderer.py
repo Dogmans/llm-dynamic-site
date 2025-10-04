@@ -7,7 +7,6 @@ discover content, process Markdown files, and generate complete HTML pages.
 
 import logging
 from typing import Optional
-import os
 from pathlib import Path
 
 from .config import (
@@ -43,7 +42,7 @@ class LLMSiteGenerator:
         logger.info(f"LLM Site Generator initialized with content root: {self.content_root}")
     
     def _get_agent(self):
-        """Get or create the SmolAgents instance."""
+        """Get or create the CodeAgent with safe file system access."""
         if self._agent is None:
             try:
                 # Import here to avoid errors if smolagents not installed
@@ -51,17 +50,14 @@ class LLMSiteGenerator:
                 
                 model = LiteLLMModel(model_id=OLLAMA_MODEL_ID)
                 
-                # CodeAgent doesn't take system_prompt in constructor
-                # We'll include it in the prompt when we call agent.run()
-                self._agent = CodeAgent(
-                    model=model,
-                    tools=[]
-                )
+                # CodeAgent automatically provides safe file system access
+                # No need for explicit tools - it handles Python execution safely
+                self._agent = CodeAgent(model=model)
                 
-                logger.info(f"Initialized LLM site generator with model: {self.model_name}")
+                logger.info(f"Initialized CodeAgent with safe execution environment")
                 
             except Exception as e:
-                logger.error(f"Failed to initialize LLM agent: {e}")
+                logger.error(f"Failed to initialize CodeAgent: {e}")
                 self._agent = None
                 
         return self._agent
@@ -98,26 +94,29 @@ class LLMSiteGenerator:
             return None
     
     def _generate_with_llm(self, url_path: str) -> Optional[str]:
-        """Generate HTML using LLM autonomous processing."""
+        """Generate HTML using CodeAgent with safe file access."""
         try:
             agent = self._get_agent()
             if not agent:
-                logger.error("LLM agent not available - cannot generate page")
+                logger.error("CodeAgent not available - cannot generate page")
                 return None
             
-            # Get file structure for the LLM to work with
-            file_structure = self._get_file_structure()
-            
-            # Create comprehensive prompt with system instructions
+            # Let CodeAgent explore file system autonomously
             prompt = f"""{SYSTEM_PROMPT}
 
-{PAGE_GENERATION_PROMPT_TEMPLATE.format(
-                url_path=url_path,
-                file_structure=file_structure,
-                content_root=self.content_root
-            )}"""
+Generate a complete HTML page for URL: {url_path}
+
+Content directory: {self.content_root}
+
+Use Python to safely:
+1. Explore the content directory structure
+2. Find relevant markdown files for this URL path  
+3. Read and parse markdown content and any layouts
+4. Generate semantic, modern HTML for the requested page
+
+Return only the complete HTML document."""
             
-            # Get HTML from the agent
+            # CodeAgent will autonomously handle file operations
             result = agent.run(prompt)
             
             # Extract HTML from the result
@@ -127,33 +126,10 @@ class LLMSiteGenerator:
             return None
             
         except Exception as e:
-            logger.error(f"LLM generation error: {e}")
+            logger.error(f"CodeAgent generation error: {e}")
             return None
     
 
-    
-
-    
-    def _get_file_structure(self) -> str:
-        """Get a text representation of the content file structure."""
-        try:
-            structure = []
-            
-            if self.content_root.exists():
-                for root, dirs, files in os.walk(self.content_root):
-                    level = root.replace(str(self.content_root), '').count(os.sep)
-                    indent = '  ' * level
-                    structure.append(f"{indent}{os.path.basename(root)}/")
-                    
-                    sub_indent = '  ' * (level + 1)
-                    for file in files:
-                        if any(file.endswith(ext) for ext in MARKDOWN_FILE_EXTENSIONS):
-                            structure.append(f"{sub_indent}{file}")
-            
-            return '\n'.join(structure)
-        except Exception as e:
-            logger.error(f"Error getting file structure: {e}")
-            return "Error reading file structure"
     
 
     
