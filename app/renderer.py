@@ -46,15 +46,15 @@ class LLMSiteGenerator:
         if self._agent is None:
             try:
                 # Import here to avoid errors if smolagents not installed
-                from smolagents import CodeAgent, LiteLLMModel
+                from smolagents import CodeAgent, LiteLLMModel, PythonInterpreterTool
                 
                 model = LiteLLMModel(model_id=OLLAMA_MODEL_ID)
                 
-                # CodeAgent automatically provides safe file system access
-                # No need for explicit tools - it handles Python execution safely
-                self._agent = CodeAgent(model=model)
+                # CodeAgent requires tools parameter - provide PythonInterpreterTool for file access
+                tools = [PythonInterpreterTool()]
+                self._agent = CodeAgent(tools=tools, model=model)
                 
-                logger.info(f"Initialized CodeAgent with safe execution environment")
+                logger.info(f"Initialized CodeAgent with PythonInterpreterTool for safe file system access")
                 
             except Exception as e:
                 logger.error(f"Failed to initialize CodeAgent: {e}")
