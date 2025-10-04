@@ -42,7 +42,7 @@ class LLMSiteGenerator:
         logger.info(f"LLM Site Generator initialized with content root: {self.content_root}")
     
     def _get_agent(self):
-        """Get or create the CodeAgent with safe file system access."""
+        """Get or create the CodeAgent with safe file system access and streaming enabled."""
         if self._agent is None:
             try:
                 # Import here to avoid errors if smolagents not installed
@@ -52,9 +52,15 @@ class LLMSiteGenerator:
                 
                 # CodeAgent requires tools parameter - provide PythonInterpreterTool for file access
                 tools = [PythonInterpreterTool()]
-                self._agent = CodeAgent(tools=tools, model=model)
+                # Enable streaming for real-time token output
+                self._agent = CodeAgent(
+                    tools=tools, 
+                    model=model,
+                    stream_outputs=True,  # Enable streaming
+                    max_print_outputs_length=None  # Don't truncate output
+                )
                 
-                logger.info(f"Initialized CodeAgent with PythonInterpreterTool for safe file system access")
+                logger.info(f"Initialized CodeAgent with streaming enabled for real-time token visibility")
                 
             except Exception as e:
                 logger.error(f"Failed to initialize CodeAgent: {e}")
@@ -94,8 +100,12 @@ class LLMSiteGenerator:
             return None
     
     def _generate_with_llm(self, url_path: str) -> Optional[str]:
-        """Generate HTML using CodeAgent with safe file access."""
+        """Generate HTML using CodeAgent with real-time streaming output."""
+        import time
+        
         try:
+            logger.info(f"🤖 Starting LLM generation for URL: {url_path}")
+            
             agent = self._get_agent()
             if not agent:
                 logger.error("CodeAgent not available - cannot generate page")
@@ -116,17 +126,36 @@ Use Python to safely:
 
 Return only the complete HTML document."""
             
-            # CodeAgent will autonomously handle file operations
+            logger.info(f"📝 Prompt length: {len(prompt)} characters")
+            logger.info("🚀 Starting LLM generation with streaming...")
+            
+            # Show progress indicator
+            start_time = time.time()
+            print("\n" + "="*60)
+            print(f"🤖 LLM GENERATING HTML FOR: {url_path}")
+            print("="*60)
+            print("📡 Real-time output:")
+            print("-"*40)
+            
+            # CodeAgent will autonomously handle file operations (streaming enabled via stream_outputs=True)
             result = agent.run(prompt)
+            
+            print("-"*40)
+            generation_time = time.time() - start_time
+            logger.info(f"✅ LLM generation completed in {generation_time:.1f} seconds")
             
             # Extract HTML from the result
             if isinstance(result, str):
+                logger.info(f"📄 Generated HTML length: {len(result)} characters")
                 return self._clean_html_response(result)
-            
-            return None
+            else:
+                logger.warning(f"❌ LLM returned non-string result: {type(result)}")
+                return None
             
         except Exception as e:
-            logger.error(f"CodeAgent generation error: {e}")
+            logger.error(f"💥 CodeAgent generation error: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return None
     
 

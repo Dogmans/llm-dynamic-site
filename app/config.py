@@ -116,6 +116,41 @@ REQUIRED_HTML_TAGS = ["<html", "<head", "<body", "</html>"]
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 LOG_LEVEL = 'INFO'
 
+# Enhanced Logging for Streaming LLM Output
+import logging
+import os
+
+def setup_enhanced_logging():
+    """Setup enhanced logging for LLM streaming visibility."""
+    # Get log level from environment (useful for debug mode)
+    log_level = os.getenv('LOG_LEVEL', LOG_LEVEL).upper()
+    
+    # Configure root logger
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format=LOG_FORMAT,
+        handlers=[
+            logging.StreamHandler(),  # Console output
+            logging.FileHandler('llm-site-debug.log', mode='a')  # File output
+        ]
+    )
+    
+    # Configure specific loggers for better visibility
+    if log_level == 'DEBUG':
+        # Enable detailed logging for LLM components
+        logging.getLogger('smolagents').setLevel(logging.DEBUG)
+        logging.getLogger('litellm').setLevel(logging.DEBUG)
+        logging.getLogger('app.renderer').setLevel(logging.DEBUG)
+        
+    # Suppress noisy third-party logs unless in debug mode
+    if log_level != 'DEBUG':
+        logging.getLogger('urllib3').setLevel(logging.WARNING)
+        logging.getLogger('httpx').setLevel(logging.WARNING)
+        logging.getLogger('httpcore').setLevel(logging.WARNING)
+
+# Call setup function
+setup_enhanced_logging()
+
 # FastAPI Configuration
 API_CONFIG = {
     "title": "LLM Dynamic Site",
